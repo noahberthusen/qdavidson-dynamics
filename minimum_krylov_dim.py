@@ -23,7 +23,62 @@ if __name__ == "__main__":
     full_path = os.path.realpath(__file__)
     path, filename = os.path.split(full_path)
 
-    def heisenberg(L):
+    pauli = np.array([np.array([[1,0],[0,1]]), np.array([[0,1],[1,0]]), np.array([[0,-1.j],[1.j,0]]), np.array([[1,0],[0,-1]])])
+    pauli_tensor = np.array([[np.kron(pauli[i], pauli[j]) for i in range(4)] for j in range(4)])
+
+    # building operators 
+    def kronecker_pad(matrix, num_qubits, starting_site): 
+        ''' pads a 1- or 2- local operator with identities on other sites to get 2^n by 2^n matrix '''
+        kron_list = [np.eye(2) for i in range(num_qubits)]    
+        kron_list[starting_site] = matrix
+        if matrix.shape[0] == 4: 
+            del kron_list[starting_site+1]
+        
+        padded_matrix = kron_list[0]
+        for i in range(1, len(kron_list)):
+            padded_matrix = np.kron(kron_list[i], padded_matrix)    
+        return padded_matrix
+
+    def heisenberg(num_qubits, bias_coeff=1.0, x_hopping_coeff=1.0, y_hopping_coeff=1.0, z_hopping_coeff=1.0): 
+        terms = []
+        # for i in range(num_qubits): 
+        #     bias = bias_coeff*kronecker_pad(pauli[3], num_qubits, i)
+        #     terms.append(bias)
+            
+        for i in range(num_qubits-1): 
+            z_hop = z_hopping_coeff*kronecker_pad(pauli_tensor[(3,3)], num_qubits, i)
+            terms.append(z_hop)
+            y_hop = y_hopping_coeff*kronecker_pad(pauli_tensor[(2,2)], num_qubits, i)
+            terms.append(y_hop)
+            x_hop = x_hopping_coeff*kronecker_pad(pauli_tensor[(1,1)], num_qubits, i)
+            terms.append(x_hop)
+        return sum(terms)
+    
+    def trotter(num_qubits, bias_coeff=1.0, x_hopping_coeff=1.0, y_hopping_coeff=1.0, z_hopping_coeff=1.0):
+        even_terms = []
+        odd_terms = []
+
+        for i in range(0, num_qubits-1, 2):
+            z_hop = z_hopping_coeff*kronecker_pad(pauli_tensor[(3,3)], num_qubits, i)
+            odd_terms.append(z_hop)
+            y_hop = y_hopping_coeff*kronecker_pad(pauli_tensor[(2,2)], num_qubits, i)
+            odd_terms.append(y_hop)
+            x_hop = x_hopping_coeff*kronecker_pad(pauli_tensor[(1,1)], num_qubits, i)
+            odd_terms.append(x_hop)
+        for i in range(1, num_qubits-1, 2):
+            z_hop = z_hopping_coeff*kronecker_pad(pauli_tensor[(3,3)], num_qubits, i)
+            even_terms.append(z_hop)
+            y_hop = y_hopping_coeff*kronecker_pad(pauli_tensor[(2,2)], num_qubits, i)
+            even_terms.append(y_hop)
+            x_hop = x_hopping_coeff*kronecker_pad(pauli_tensor[(1,1)], num_qubits, i)
+            even_terms.append(x_hop)
+
+        even = sum(even_terms)
+        odd = sum(odd_terms)
+
+        return even, odd
+
+    def fast_heisenberg(L):
         def FlipFlop(n, i, j):
             v = list(format(n, '0{}b'.format(L)))
             if (v[i] != '0' and v[j] != '1'):
@@ -56,20 +111,6 @@ if __name__ == "__main__":
         #correction_state = op @ state
         correction_state = ham @ state - energy*state
         return correction_state / np.linalg.norm(correction_state)
-
-    # def eff_ham(ham, basis_set): 
-    #     eff_H = np.eye(len(basis_set), dtype=complex)
-    #     for i in range(len(basis_set)): 
-    #         for j in range(len(basis_set)): 
-    #             eff_H[i][j] = basis_set[i].conj().T.dot(ham.dot(basis_set[j]))
-    #     return eff_H    
-
-    # def eff_overlap(basis_set): 
-    #     eff_S = np.eye(len(basis_set), dtype=complex)
-    #     for i in range(len(basis_set)): 
-    #         for j in range(len(basis_set)): 
-    #             eff_S[i][j] = basis_set[i].conj().dot(basis_set[j])
-    #     return eff_S
 
     def eff_ham(ham, basis_set): 
         eff_H = np.eye(len(basis_set), dtype=complex)
@@ -143,7 +184,7 @@ if __name__ == "__main__":
     # num_qubits = 11  # calculate up to num_qubits qubits
     epsilon = 0.01  # we want the fidelity with the exact state to be at least this at time = tf
 
-    tf = 10
+    tf = 100
     ts = np.linspace(0, tf, 200)
 
     # M = 8
@@ -157,17 +198,17 @@ if __name__ == "__main__":
 
 
     if (run_davidson):
-        filename = "./results/heisenberg/" + f"qdavidson_{num_qubits}.txt"
+        filename = "./results/xyz/" + f"qdavidson_{num_qubits}.txt"
         file = open(os.path.join(path, filename), 'w')
         file.write("qubits,num_iters,num_states,fidelity\n")
 
-        for i in range(num_qubits, num_qubits+1):
+        for i in range(2, num_qubits+1):
+            print(i)
             c = cs[0:i]
-            UnitVector = lambda c: eye(2**i)[c]
-            init = np.zeros(2**num_qubits)
+            init = np.zeros(2**i)
             init[int(''.join(c), 2)] = 1
             basis_set = [init]
-            ham = heisenberg(i)
+            ham = heisenberg(i, x_hopping_coeff=1, y_hopping_coeff=2, z_hopping_coeff=3)
             exact_final_te = expm_multiply(-1j * ham * ts[-1], init)
 
             num_iters = 1
@@ -187,24 +228,32 @@ if __name__ == "__main__":
                 num_iters += 1
         file.close()
     else:
-        filename = "./results/heisenberg/" + f"qkrylov_{num_qubits}_{M}_{tau}.txt"
+        filename = "./results/xyz/" + f"qkrylov_{num_qubits}_{M}_{tau}.txt"
         file = open(os.path.join(path, filename), 'w')
         file.write("qubits,M,tau,num_iters,num_states,fidelity\n")
 
-        for i in range(num_qubits, num_qubits+1):
+        for i in range(2, num_qubits+1):
+            print(i)
             c = cs[0:i]
             UnitVector = lambda c: np.eye(2**i)[c]
             init = UnitVector(int(''.join(c), 2))
             added_indices = []
-            ham = heisenberg(i)
+            ham = heisenberg(i, x_hopping_coeff=1, y_hopping_coeff=2, z_hopping_coeff=3)
             exact_final_te = expm_multiply(-1j * ham * ts[-1], init)
 
-            expm_est = expm(-1j * tau * ham) # should be trotterized really, eventually
+            even, odd = trotter(i, x_hopping_coeff=1, y_hopping_coeff=2, z_hopping_coeff=3)
+            if i > 2:
+                expm_est_trot = expm(-1j * tau * even) @ expm(-1j * tau * odd)
+            else:
+                expm_est_trot = expm(-1j * tau * odd)
+            exact_expm_trot = expm(-1j * tau * ham)
             
             basis_set = [init]
             for j in range(1, M):
                 new_states = []
-                new_states.append(expm_multiply(-1j * j * tau * ham, basis_set[-1]))
+                # new_states.append(np.linalg.matrix_power(exact_expm_trot, j) @ basis_set[-1])
+                # new_states.append(expm_multiply(-1j * j * tau * ham, basis_set[-1]))
+                new_states.append(np.linalg.matrix_power(expm_est_trot, j) @ basis_set[-1])
                 basis_set.extend(new_states)
 
             num_ref_states = 1

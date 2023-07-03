@@ -4,6 +4,7 @@ from scipy.linalg import eigh
 from scipy.sparse.linalg import expm, expm_multiply
 import matplotlib.pyplot as plt
 import os
+import pandas as pd
 
 
 full_path = os.path.realpath(__file__)
@@ -29,9 +30,9 @@ def kronecker_pad(matrix, num_qubits, starting_site):
 # models
 def heisenberg(num_qubits, bias_coeff=1.0, x_hopping_coeff=1.0, y_hopping_coeff=1.0, z_hopping_coeff=1.0): 
     terms = []
-    for i in range(num_qubits): 
-        bias = bias_coeff*kronecker_pad(pauli[3], num_qubits, i)
-        terms.append(bias)
+    # for i in range(num_qubits): 
+    #     bias = bias_coeff*kronecker_pad(pauli[3], num_qubits, i)
+    #     terms.append(bias)
         
     for i in range(num_qubits-1): 
         z_hop = z_hopping_coeff*kronecker_pad(pauli_tensor[(3,3)], num_qubits, i)
@@ -107,17 +108,19 @@ def QDFFEvolve(S, H, t, basis, init):
 # ------------------------------------------------------------
 
 num_qubits = 6
-krylov_dims = [4, 6, 8]
+krylov_dims = [5, 7, 8]
 
 tf = 10
 ts = np.linspace(0, tf, 200)
 
-c = list("0101") 
+c = list("010101") 
 UnitVector = lambda c: np.eye(2**num_qubits)[c]
 init = UnitVector(int(''.join(c), 2))
-basis_set = [init]
 
-ham = heisenberg(num_qubits)
+ham = heisenberg(num_qubits, x_hopping_coeff=1, y_hopping_coeff=2, z_hopping_coeff=3)
+
+df = pd.read_csv(os.path.join(path, "../results/xyz/qdavidson_9.txt"))
+qd_successes = df[df["qubits"] == num_qubits]
 
 # ------------------------------------------------------------
 
@@ -125,6 +128,7 @@ ham = heisenberg(num_qubits)
 exact_te = [expm_multiply(-1j * ham * t, init) for t in ts]
 qdff_tes = []
 for krylov_dim in krylov_dims:
+    basis_set = [init]
     _, _, _, basis_set, eff_H, eff_S = qdavidson(ham, basis_set, krylov_dim, tol=0.0001)
 
     c0 = np.zeros(len(basis_set))
@@ -162,7 +166,7 @@ fig, ax = plt.subplots(len(krylov_dims)+1, 1, figsize=(5,7), gridspec_kw={'heigh
 for i, qdff_auto in enumerate(qdff_autos):
     # ax[i].set_title(f"{krylov_dims[i]}")
     ax[i].plot(ts, exact_auto, c='k')
-    ax[i].plot(ts, qdff_auto, c=colors[i], linestyle="--")
+    ax[i].plot(ts, qdff_auto, c=colors[i])
 
 
     ax[i].tick_params(axis='x', labelsize=10)
@@ -175,7 +179,7 @@ handles,labels = ax[-1].get_legend_handles_labels()
 handles = handles[::-1]
 labels = labels[::-1]
 ax[-1].legend().get_frame().set_linewidth(1)
-ax[-1].legend(handles, labels, loc='upper right', framealpha=0.8)
+ax[-1].legend(handles, labels, loc='lower left', framealpha=0.8)
 ax[-1].tick_params(axis='x', labelsize=10)
 ax[-1].tick_params(axis='y', labelsize=10)
 
@@ -185,5 +189,14 @@ ax[-1].set_ylabel("Fidelity, $\mathcal{F}$", fontsize=12)
 # ax[-1].set_yscale('log')
 # plt.tight_layout()
 
+cs = [(0,0,0) for _ in qd_successes["num_states"]]
+# for i,kylov_dim in enumerate(krylov_dims):
+#     cs[krylov_dim] = colors[i]
+ins = ax[-1].inset_axes([0.75, 0.60, 0.2, 0.32])
+ins.scatter(qd_successes["num_states"], qd_successes["fidelity"], c=cs, marker='o', s=8)
+ins.tick_params(axis='x', labelsize=8)
+ins.tick_params(axis='y', labelsize=8)
+ins.set_ylabel("$\mathcal{F}$", fontsize=10)
+ins.set_xlabel("Krylov dim.", fontsize=10)
 
 plt.savefig(os.path.join(path, '../figures/qdff_auto.png'), dpi=1000, transparent=False, bbox_inches='tight')

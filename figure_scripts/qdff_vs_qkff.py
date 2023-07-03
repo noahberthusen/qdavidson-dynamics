@@ -6,11 +6,15 @@ import pandas as pd
 full_path = os.path.realpath(__file__)
 path, filename = os.path.split(full_path)
 
-qdavidson = pd.read_csv(os.path.join(path, "../results/xxx/qdavidson.txt"), names=["qubits","num_iters","num_states","fidelity"])
+qdavidson = pd.read_csv(os.path.join(path, "../results/xyz/qdavidson_11.txt"))
 qd_successes = qdavidson[qdavidson["fidelity"] > 1 - 1e-2]
 
-krylov = pd.read_csv(os.path.join(path, "../results/xxx/qkrylov_10_0.1.txt"), names=["qubits","M","tau","num_iters","num_states","fidelity"])
-kr_successes = krylov[krylov["fidelity"] > 1 - 1e-2]
+kr_successes = []
+Ms = [10, 20, 30]
+log = False
+for M in Ms:
+    krylov = pd.read_csv(os.path.join(path, f"../results/xyz/qkrylov_10_{M}_0.1.txt"))
+    kr_successes.append(krylov[krylov["fidelity"] > 1 - 1e-2])
 
 # -----------------------------------------------------------------------------
 
@@ -26,14 +30,25 @@ colors = [(c[0]/255, c[1]/255, c[2]/255) for c in colors]
 # colors = sns.color_palette("hls", 6)
 # colors = sns.color_palette("Set2", 6)
 
-fig, ax = plt.subplots(1, 1, figsize=(5.5,4))
-ax.plot(qd_successes["qubits"], qd_successes["num_states"], "-o", label="QDavidson", color=colors[0])
-ax.plot(kr_successes["qubits"], kr_successes["num_states"], "-o", label="Multi-reference Krylov", color=colors[1])
+fig, ax = plt.subplots(1, 2, figsize=(10.5,4))
+ax[0].plot(qd_successes["qubits"], qd_successes["num_states"], "-o", label="QDavidson", color=colors[0])
+ax[1].plot(qd_successes["qubits"], qd_successes["num_iters"], "-o", label="QDavidson", color=colors[0])
 
-plt.legend(loc="lower right")
-plt.yscale('log')
-plt.xlabel("System size")
-plt.ylabel("Krylov dimension")
+for i, kr_success in enumerate(kr_successes):
+    ax[0].plot(kr_success["qubits"], kr_success["num_states"], "-o", label=f"Multi-ref. Krylov, M={Ms[i]}", color=colors[i+1])
+    ax[1].plot(kr_success["qubits"], kr_success["num_iters"], "-o", label=f"Multi-ref. Krylov, M={Ms[i]}", color=colors[i+1])
+
+
+if (log):
+    plt.legend(loc="lower right")
+    plt.yscale('log')
+else:
+    plt.legend(loc="upper left")
+    
+ax[0].set_xlabel("System size")
+ax[1].set_xlabel("System size")
+ax[0].set_ylabel("Krylov dimension")
+ax[1].set_ylabel("Num iterations")
 
 # plt.show()
 plt.savefig(os.path.join(path, '../figures/qd_vs_mrk.png'), dpi=1000, transparent=False, bbox_inches='tight')
