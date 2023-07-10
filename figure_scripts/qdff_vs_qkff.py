@@ -6,15 +6,21 @@ import pandas as pd
 full_path = os.path.realpath(__file__)
 path, filename = os.path.split(full_path)
 
-qdavidson = pd.read_csv(os.path.join(path, "../results/xyz/qdavidson_11.txt"))
-qd_successes = qdavidson[qdavidson["fidelity"] > 1 - 1e-2]
-
 kr_successes = []
-Ms = [10, 20, 30]
+qd_successes = []
+Ms = [3, 5, 10]
 log = False
+
+qd = pd.read_csv(os.path.join(path, f"../results/xyz/qdavidson_11.txt"))
+qd = qd[qd["fidelity"] > 1 - 1e-2]
+
 for M in Ms:
     krylov = pd.read_csv(os.path.join(path, f"../results/xyz/qkrylov_10_{M}_0.1.txt"))
     kr_successes.append(krylov[krylov["fidelity"] > 1 - 1e-2])
+
+    qdavidson = pd.read_csv(os.path.join(path, f"../results/xyz/mr_qdavidson_10_{M}_0.1.txt"))
+    qd_successes.append(qdavidson[qdavidson["fidelity"] > 1 - 1e-2])
+
 
 # -----------------------------------------------------------------------------
 
@@ -31,12 +37,18 @@ colors = [(c[0]/255, c[1]/255, c[2]/255) for c in colors]
 # colors = sns.color_palette("Set2", 6)
 
 fig, ax = plt.subplots(1, 2, figsize=(10.5,4))
-ax[0].plot(qd_successes["qubits"], qd_successes["num_states"], "-o", label="QDavidson", color=colors[0])
-ax[1].plot(qd_successes["qubits"], qd_successes["num_iters"], "-o", label="QDavidson", color=colors[0])
+
+
+ax[0].plot(qd["qubits"], qd["num_states"], "-o", label="QDavidson", color='k')
+ax[1].plot(qd["qubits"], qd["num_iters"], "-o", label="QDavidson", color='k')
+
+for i, qd_success in enumerate(qd_successes):
+    ax[0].plot(qd_success["qubits"], qd_success["num_states"], "-o", label=f"QDavidson, M={Ms[i]}", color=colors[i+1])
+    ax[1].plot(qd_success["qubits"], qd_success["num_iters"], "-o", label=f"QDavidson, M={Ms[i]}", color=colors[i+1])
 
 for i, kr_success in enumerate(kr_successes):
-    ax[0].plot(kr_success["qubits"], kr_success["num_states"], "-o", label=f"Multi-ref. Krylov, M={Ms[i]}", color=colors[i+1])
-    ax[1].plot(kr_success["qubits"], kr_success["num_iters"], "-o", label=f"Multi-ref. Krylov, M={Ms[i]}", color=colors[i+1])
+    ax[0].plot(kr_success["qubits"], kr_success["num_states"], "--o", label=f"Multi-ref. Krylov, M={Ms[i]}", color=colors[i+1])
+    ax[1].plot(kr_success["qubits"], kr_success["num_iters"], "--o", label=f"Multi-ref. Krylov, M={Ms[i]}", color=colors[i+1])
 
 
 if (log):
@@ -44,7 +56,7 @@ if (log):
     plt.yscale('log')
 else:
     plt.legend(loc="upper left")
-    
+
 ax[0].set_xlabel("System size")
 ax[1].set_xlabel("System size")
 ax[0].set_ylabel("Krylov dimension")

@@ -26,26 +26,26 @@ if __name__ == "__main__":
     pauli = np.array([np.array([[1,0],[0,1]]), np.array([[0,1],[1,0]]), np.array([[0,-1.j],[1.j,0]]), np.array([[1,0],[0,-1]])])
     pauli_tensor = np.array([[np.kron(pauli[i], pauli[j]) for i in range(4)] for j in range(4)])
 
-    # building operators 
-    def kronecker_pad(matrix, num_qubits, starting_site): 
+    # building operators
+    def kronecker_pad(matrix, num_qubits, starting_site):
         ''' pads a 1- or 2- local operator with identities on other sites to get 2^n by 2^n matrix '''
-        kron_list = [np.eye(2) for i in range(num_qubits)]    
+        kron_list = [np.eye(2) for i in range(num_qubits)]
         kron_list[starting_site] = matrix
-        if matrix.shape[0] == 4: 
+        if matrix.shape[0] == 4:
             del kron_list[starting_site+1]
-        
+
         padded_matrix = kron_list[0]
         for i in range(1, len(kron_list)):
-            padded_matrix = np.kron(kron_list[i], padded_matrix)    
+            padded_matrix = np.kron(kron_list[i], padded_matrix)
         return padded_matrix
 
-    def heisenberg(num_qubits, bias_coeff=1.0, x_hopping_coeff=1.0, y_hopping_coeff=1.0, z_hopping_coeff=1.0): 
+    def heisenberg(num_qubits, bias_coeff=1.0, x_hopping_coeff=1.0, y_hopping_coeff=1.0, z_hopping_coeff=1.0):
         terms = []
-        # for i in range(num_qubits): 
+        # for i in range(num_qubits):
         #     bias = bias_coeff*kronecker_pad(pauli[3], num_qubits, i)
         #     terms.append(bias)
-            
-        for i in range(num_qubits-1): 
+
+        for i in range(num_qubits-1):
             z_hop = z_hopping_coeff*kronecker_pad(pauli_tensor[(3,3)], num_qubits, i)
             terms.append(z_hop)
             y_hop = y_hopping_coeff*kronecker_pad(pauli_tensor[(2,2)], num_qubits, i)
@@ -53,7 +53,7 @@ if __name__ == "__main__":
             x_hop = x_hopping_coeff*kronecker_pad(pauli_tensor[(1,1)], num_qubits, i)
             terms.append(x_hop)
         return sum(terms)
-    
+
     def trotter(num_qubits, bias_coeff=1.0, x_hopping_coeff=1.0, y_hopping_coeff=1.0, z_hopping_coeff=1.0):
         even_terms = []
         odd_terms = []
@@ -87,9 +87,9 @@ if __name__ == "__main__":
                 return int(''.join(v), 2)
             else:
                 return -1
-            
+
         sprs = lil_matrix((2**L, 2**L), dtype=np.int8)
-        for i in range(L-1): 
+        for i in range(L-1):
             for j in range(2**L):
                 h = FlipFlop(j, i, i+1)
                 if (h != -1):
@@ -112,41 +112,40 @@ if __name__ == "__main__":
         correction_state = ham @ state - energy*state
         return correction_state / np.linalg.norm(correction_state)
 
-    def eff_ham(ham, basis_set): 
+    def eff_ham(ham, basis_set):
         eff_H = np.eye(len(basis_set), dtype=complex)
-        for i in range(len(basis_set)): 
-            for j in range(i,len(basis_set)): 
+        for i in range(len(basis_set)):
+            for j in range(i,len(basis_set)):
                 overlap = np.conj(basis_set[i]).dot(ham.dot(basis_set[j]))
                 eff_H[i][j] = overlap
                 if (i != j):
                     eff_H[j][i] = np.conj(overlap)
-        return eff_H   
+        return eff_H
 
-    def eff_overlap(basis_set): 
+    def eff_overlap(basis_set):
         eff_S = np.eye(len(basis_set), dtype=complex)
-        for i in range(len(basis_set)): 
-            for j in range(i,len(basis_set)): 
+        for i in range(len(basis_set)):
+            for j in range(i,len(basis_set)):
                 overlap = basis_set[i].conj().dot(basis_set[j])
                 eff_S[i][j] = overlap
                 if (i != j):
                     eff_S[j][i] = np.conj(overlap)
         return eff_S
-        
-        
+
     def qdavidson_iter(ham, basis_set, tol=0.5):
         num_basis = len(basis_set)
         eff_H = eff_ham(ham, basis_set)
-        eff_S = eff_overlap(basis_set)        
+        eff_S = eff_overlap(basis_set)
         evals, evecs = eigh(eff_H, eff_S)
         estates = [np.array(sum([evecs[:,i][j] * basis_set[j] for j in range(num_basis)])) for i in range(num_basis)]
         new_basis_set = copy.deepcopy(basis_set)
         residue_vals = []
-        for i in range(num_basis): 
+        for i in range(num_basis):
             val = np.linalg.norm((ham @ estates[i]) - (evals[i] * estates[i]))
             residue_vals.append(val)
-            if val > tol: 
-                state = correction_state(ham, evals[i], estates[i])            
-                if linear_independence(state, new_basis_set, eff_S, tol): 
+            if val > tol:
+                state = correction_state(ham, evals[i], estates[i])
+                if linear_independence(state, new_basis_set, eff_S, tol):
                     '''
                     eff_S = np.pad(eff_S, ((0, 1), (0, 1)), mode='constant')
                     for i in range(len(new_basis_set)):
@@ -157,19 +156,19 @@ if __name__ == "__main__":
                     new_basis_set.append(state)
                     eff_S = eff_overlap(new_basis_set)
                     eff_H = eff_ham(ham, new_basis_set)
-                
+
         return evals, estates, residue_vals, new_basis_set, eff_H, eff_S
 
-    def linear_independence(correction_vec, basis_set, eff_S, tol=0.01): 
+    def linear_independence(correction_vec, basis_set, eff_S, tol=0.01):
         b = np.array([correction_vec.conj().T.dot(basis_set[i]) for i in range(len(basis_set))])
         if np.all(np.round(eff_S, 8) == np.eye(len(basis_set))):
             return np.linalg.norm(b) < tol
         else:
-            return np.linalg.norm(np.linalg.pinv(eff_S).dot(b)) < tol    
+            return np.linalg.norm(np.linalg.pinv(eff_S).dot(b)) < tol
 
-    def qdavidson(ham, initial_basis_set, num_iter, tol=0.5): 
+    def qdavidson(ham, initial_basis_set, num_iter, tol=0.5):
         basis_set = copy.deepcopy(initial_basis_set)
-        for i in range(num_iter): 
+        for i in range(num_iter):
             evals, estates, residue_vals, basis_set, eff_H, eff_S = qdavidson_iter(ham, basis_set, tol)
         return evals, estates, residue_vals, basis_set, eff_H, eff_S
 
@@ -184,12 +183,12 @@ if __name__ == "__main__":
     # num_qubits = 11  # calculate up to num_qubits qubits
     epsilon = 0.01  # we want the fidelity with the exact state to be at least this at time = tf
 
-    tf = 100
+    tf = 10
     ts = np.linspace(0, tf, 200)
 
     # M = 8
     # tau = 0.1
-    eff_S_eps = 1e-5  # cutoff values in eff_S less than this value
+    eff_S_eps = 1e-9  # cutoff values in eff_S less than this value
 
     cs = list("01010101010101010101010101010101010101010101010101")
 
@@ -197,7 +196,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
 
 
-    if (run_davidson):
+    if (run_davidson == 1):
         filename = "./results/xyz/" + f"qdavidson_{num_qubits}.txt"
         file = open(os.path.join(path, filename), 'w')
         file.write("qubits,num_iters,num_states,fidelity\n")
@@ -227,7 +226,7 @@ if __name__ == "__main__":
 
                 num_iters += 1
         file.close()
-    else:
+    elif (run_davidson == 0):
         filename = "./results/xyz/" + f"qkrylov_{num_qubits}_{M}_{tau}.txt"
         file = open(os.path.join(path, filename), 'w')
         file.write("qubits,M,tau,num_iters,num_states,fidelity\n")
@@ -235,8 +234,8 @@ if __name__ == "__main__":
         for i in range(2, num_qubits+1):
             print(i)
             c = cs[0:i]
-            UnitVector = lambda c: np.eye(2**i)[c]
-            init = UnitVector(int(''.join(c), 2))
+            init = np.zeros(2**i)
+            init[int(''.join(c), 2)] = 1
             added_indices = []
             ham = heisenberg(i, x_hopping_coeff=1, y_hopping_coeff=2, z_hopping_coeff=3)
             exact_final_te = expm_multiply(-1j * ham * ts[-1], init)
@@ -246,15 +245,12 @@ if __name__ == "__main__":
                 expm_est_trot = expm(-1j * tau * even) @ expm(-1j * tau * odd)
             else:
                 expm_est_trot = expm(-1j * tau * odd)
-            exact_expm_trot = expm(-1j * tau * ham)
-            
+
             basis_set = [init]
+            new_states = []
             for j in range(1, M):
-                new_states = []
-                # new_states.append(np.linalg.matrix_power(exact_expm_trot, j) @ basis_set[-1])
-                # new_states.append(expm_multiply(-1j * j * tau * ham, basis_set[-1]))
                 new_states.append(np.linalg.matrix_power(expm_est_trot, j) @ basis_set[-1])
-                basis_set.extend(new_states)
+            basis_set.extend(new_states)
 
             num_ref_states = 1
             while (True):
@@ -263,34 +259,85 @@ if __name__ == "__main__":
 
                 eff_S = eff_overlap(basis_set)
                 eff_H = eff_ham(ham, basis_set)
-                
+
                 U, D, Vh = np.linalg.svd(eff_S)
                 D[np.abs(D) < eff_S_eps] = 0
                 D_inv = [1/d if d > 0 else 0 for d in D]
                 S_inv = Vh.conj().T @ np.diag(D_inv) @ U.conj().T
-                
+
                 qdff_final_te = QDFFEvolve(S_inv, eff_H, ts[-1], basis_set, c0)
                 fidelity = np.abs(np.conj(qdff_final_te) @ exact_final_te)**2
                 # print(f"{i},{M},{tau},{num_ref_states},{len(basis_set)},{fidelity}")
 
                 file.write(f"{i},{M},{tau},{num_ref_states},{len(basis_set)},{fidelity}\n")
                 if (fidelity > 1 - epsilon):
-                    break       
+                    break
 
                 # should take second most probable if the first one is already in there
                 xs = np.eye(2**i)
-                # probs = [ np.abs(np.conj(x) @ ref_states[-1])**2 for x in xs]
-                # ref_states.append(xs[np.argmax(probs)])
                 sorted_probs_inds = np.argsort([np.abs(np.conj(x) @ basis_set[-1])**2 for x in xs])[::-1]
                 for k in range(len(sorted_probs_inds)):
                     if not (sorted_probs_inds[k] in added_indices):
                         num_ref_states += 1
                         basis_set.append(xs[sorted_probs_inds[k]])
+
+                        new_states = []
                         for j in range(1, M):
-                            new_states = []
-                            new_states.append(expm_multiply(-1j * j * tau * ham, basis_set[-1]))
-                            basis_set.extend(new_states)
+                            new_states.append(np.linalg.matrix_power(expm_est_trot, j) @ basis_set[-1])
+                        basis_set.extend(new_states)
+
                         added_indices.append(sorted_probs_inds[k])
                         break
         file.close()
+    elif (run_davidson == 2):
+        filename = "./results/xyz/" + f"mr_qdavidson_{num_qubits}_{M}_{tau}.txt"
+        file = open(os.path.join(path, filename), 'w')
+        file.write("qubits,M,tau,num_iters,num_states,fidelity\n")
 
+
+        for i in range(2, num_qubits+1):
+            print(i, "-------------------")
+            c = cs[0:i]
+            init = np.zeros(2**i)
+            init[int(''.join(c), 2)] = 1
+            basis_set = [init]
+            ham = heisenberg(i, x_hopping_coeff=1, y_hopping_coeff=1, z_hopping_coeff=1)
+            exact_final_te = expm_multiply(-1j * ham * ts[-1], init)
+
+            even, odd = trotter(i, x_hopping_coeff=1, y_hopping_coeff=1, z_hopping_coeff=1)
+            if i > 2:
+                expm_est_trot = expm(-1j * tau * even) @ expm(-1j * tau * odd)
+            else:
+                expm_est_trot = expm(-1j * tau * odd)
+
+            num_iters = 1
+            while (True):
+                print(len(basis_set))
+                basis_states_with_te = []
+                for k, _ in enumerate(basis_set):
+                    new_states = [basis_set[k]]
+                    for j in range(1, M):
+                        new_states.append(np.linalg.matrix_power(expm_est_trot, j) @ basis_set[k])
+                    basis_states_with_te.extend(new_states)
+
+                eff_H = eff_ham(ham, basis_states_with_te)
+                eff_S = eff_overlap(basis_states_with_te)
+
+                c0 = np.zeros(len(basis_states_with_te))
+                c0[0] = 1
+
+                U, D, Vh = np.linalg.svd(eff_S)
+                D[np.abs(D) < eff_S_eps] = 0
+                D_inv = [1/d if d > 0 else 0 for d in D]
+                S_inv = Vh.conj().T @ np.diag(D_inv) @ U.conj().T
+
+                qdff_final_te = QDFFEvolve(S_inv, eff_H, ts[-1], basis_states_with_te, c0)
+                fidelity = np.abs(np.conj(qdff_final_te) @ exact_final_te)**2
+                file.write(f"{i},{M},{tau},{num_iters},{len(basis_states_with_te)},{fidelity}\n")
+
+                if (fidelity > 1-epsilon):
+                    break
+
+                _, _, _, basis_set, _, _ = qdavidson(ham, basis_set, 1, tol=0.0001)
+                num_iters += 1
+        file.close()
